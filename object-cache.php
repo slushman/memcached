@@ -61,16 +61,23 @@ function wp_cache_set($key, $data, $flag = '', $expire = 0) {
 }
 
 class WP_Object_Cache {
-	var $global_groups = array ('users', 'usermeta');
+	var $global_groups = array ('users', 'userlogins', 'usermeta');
+	var $cache = array ();
 
 	function add($id, $data, $group = 'default', $expire = 0) {
 		$key = $this->key($id, $group);
-		return $this->mc->add($key, $data, $expire);
+		$result = $this->mc->add($key, $data, $expire);
+		if ( false !== $result )
+			$this->cache[$key] = $data;
+		return $result;
 	}
 
 	function delete($id, $group = 'default') {
 		$key = $this->key($id, $group);
-		return $this->mc->delete($key);
+		$result = $this->mc->delete($key);
+		if ( false !== $result )
+			unset($this->cache[$key]);
+		return $result;
 	}
 
 	function flush() {
@@ -79,13 +86,21 @@ class WP_Object_Cache {
 
 	function get($id, $group = 'default') {
 		$key = $this->key($id, $group);
-		$value = $this->mc->get($key);
+		
+		if ( isset($this->cache[$key]) )
+			$value = $this->cache[$key];
+		else
+			$value = $this->mc->get($key);
+
 		/* echo "Cache key: $key<br/>";
 		echo 'Cache value:<br/>';
 		var_dump($value);
 		echo '<br/>'; */
 		if ( NULL === $value )
 			$value = false;
+			
+		$this->cache[$key] = $value;
+
 		return $value;
 	}
 
@@ -105,20 +120,32 @@ class WP_Object_Cache {
 
 	function replace($id, $data, $group = 'default', $expire = 0) {
 		$key = $this->key($id, $group);
-		return $this->mc->replace($key, $data, $expire);
+		$result = $this->mc->replace($key, $data, $expire);
+		if ( false !== $result )
+			$this->cache[$key] = $data;
+		return $result;
 	}
 
 	function set($id, $data, $group = 'default', $expire = 0) {
 		$key = $this->key($id, $group);
-		return $this->mc->set($key, $data, $expire);
+		$result = $this->mc->set($key, $data, $expire);
+		if ( false !== $result )
+			$this->cache[$key] = $data;
+		return $result;
 	}
 
 	function stats() {
-		echo "<p>";
-		echo "<strong>Cache Gets:</strong> {$this->mc->stats['get']}<br/>";
-		echo "<strong>Cache Adds:</strong> {$this->mc->stats['add']}<br/>";
-		echo "<strong>Cache Replaces:</strong> {$this->mc->stats['replace']}<br/>";
-		echo "</p>";
+		echo "<p>\n";
+		echo "<strong>Cache Gets:</strong> {$this->mc->stats['get']}<br/>\n";
+		echo "<strong>Cache Adds:</strong> {$this->mc->stats['add']}<br/>\n";
+		echo "<strong>Cache Replaces:</strong> {$this->mc->stats['replace']}<br/>\n";
+		echo "</p>\n";
+		
+		if ( ! empty($this->cache) ) {
+			echo "<pre>\n";
+			print_r($this->cache);
+			echo "</pre>\n";
+		}
 	}
 
 	function WP_Object_Cache() {
