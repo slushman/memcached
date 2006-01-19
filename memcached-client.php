@@ -874,7 +874,8 @@ class memcached
 
          } else 
          {
-            $this->_debugprint("Error parsing memcached response\n");
+            if ($this->_debug)
+               $this->_debugprint("Error parsing memcached response\n");
             return 0;
          }
       }
