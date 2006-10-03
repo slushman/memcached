@@ -3,7 +3,7 @@
 /*
 Name: Memcached
 Description: Memcached backend for the WP Object Cache.
-Version: 0.2
+Version: 0.3
 URI: http://dev.wp-plugins.org/browser/memcached/
 Author: Ryan Boren
 
@@ -21,7 +21,9 @@ function wp_cache_add($key, $data, $flag = '', $expire = 0) {
 }
 
 function wp_cache_close() {
-	return true;
+	global $wp_object_cache;
+
+	return $wp_object_cache->close();
 }
 
 function wp_cache_delete($id, $flag = '') {
@@ -57,27 +59,46 @@ function wp_cache_replace($key, $data, $flag = '', $expire = 0) {
 function wp_cache_set($key, $data, $flag = '', $expire = 0) {
 	global $wp_object_cache;
 
-	return $wp_object_cache->set($key, $data, $flag, $expire);
+	if ( defined('WP_INSTALLING') == false )
+		return $wp_object_cache->set($key, $data, $flag, $expire);
+	else
+		return true;
 }
 
 class WP_Object_Cache {
-	var $global_groups = array ('users', 'userlogins', 'usermeta');
+	var $global_groups = array ('users', 'userlogins', 'usermeta', 'site-options', 'site-lookup', 'blog-lookup', 'blog-details', 'rss');
+	var $autoload_groups = array ('options');
 	var $cache = array ();
+	var $rmc = array();
+	var $cache_enabled = true;
+	var $default_expiration = 0;
 
 	function add($id, $data, $group = 'default', $expire = 0) {
 		$key = $this->key($id, $group);
+		$expire = ($expire == 0) ? $this->default_expiration : $expire;
 		$result = $this->mc->add($key, $data, $expire);
 		if ( false !== $result )
 			$this->cache[$key] = $data;
 		return $result;
 	}
 
+	function close() {
+		$this->mc->disconnect_all();	
+	}
+
 	function delete($id, $group = 'default') {
 		$key = $this->key($id, $group);
 		$result = $this->mc->delete($key);
+
+		// Update remote servers.
+		if ( count($this->rmc) > 0 ) {
+ 			foreach ( $this->rmc as $i => $mc )
+ 				$this->rmc[$i]->set($key, 'checkthedatabaseplease', 3);
+		}
 		if ( false !== $result )
 			unset($this->cache[$key]);
-		return $result;
+
+		return $result; 
 	}
 
 	function flush() {
@@ -92,14 +113,13 @@ class WP_Object_Cache {
 		else
 			$value = $this->mc->get($key);
 
-		/* echo "Cache key: $key<br/>";
-		echo 'Cache value:<br/>';
-		var_dump($value);
-		echo '<br/>'; */
 		if ( NULL === $value )
 			$value = false;
 			
 		$this->cache[$key] = $value;
+
+		if ( 'checkthedatabaseplease' == $value )
+			$value = false;
 
 		return $value;
 	}
@@ -115,11 +135,12 @@ class WP_Object_Cache {
 		else
 			$prefix = $blog_id . ':';
 
-		return "$prefix$group:$key";
+		return preg_replace('/\s+/', '', "$prefix$group:$key");
 	}
 
 	function replace($id, $data, $group = 'default', $expire = 0) {
 		$key = $this->key($id, $group);
+		$expire = ($expire == 0) ? $this->default_expiration : $expire;
 		$result = $this->mc->replace($key, $data, $expire);
 		if ( false !== $result )
 			$this->cache[$key] = $data;
@@ -128,9 +149,11 @@ class WP_Object_Cache {
 
 	function set($id, $data, $group = 'default', $expire = 0) {
 		$key = $this->key($id, $group);
+		if ( isset($this->cache[$key]) && ('checkthedatabaseplease' == $this->cache[$key]) )
+			return false;
+		$this->cache[$key] = $data;
+		$expire = ($expire == 0) ? $this->default_expiration : $expire;
 		$result = $this->mc->set($key, $data, $expire);
-		if ( false !== $result )
-			$this->cache[$key] = $data;
 		return $result;
 	}
 
@@ -150,16 +173,27 @@ class WP_Object_Cache {
 
 	function WP_Object_Cache() {
 		global $memcached_servers;
+		global $remote_memcached_clusters;
+
 		if ( isset($memcached_servers) )
 			$servers = $memcached_servers;
 		else
 			$servers = array('127.0.0.1:11211');
 
   		$this->mc = new memcached(array(
-               'servers' => $servers,
-               'debug'   => false,
-               'compress_threshold' => 10240,
-               'persistant' => true));
+				'servers' => $servers,
+				'debug'   => false,
+				'compress_threshold' => 10240,
+				'persistant' => true));
+
+		if ( isset($remote_memcached_clusters) )
+			foreach ( $remote_memcached_clusters as $servers )
+		  		$this->rmc[] = new memcached(array(
+						'servers' => $servers,
+						'debug'   => false,
+						'compress_threshold' => 10240,
+						'persistant' => true));
+
 	}
 }
 ?>
