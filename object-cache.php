@@ -72,9 +72,16 @@ class WP_Object_Cache {
 	var $rmc = array();
 	var $cache_enabled = true;
 	var $default_expiration = 0;
+	var $no_mc_groups = array( 'comment', 'counts' );
 
 	function add($id, $data, $group = 'default', $expire = 0) {
 		$key = $this->key($id, $group);
+
+		if ( in_array($group, $this->no_mc_groups) ) {
+			$this->cache[$key] = $data;
+			return true;
+		}
+
 		$expire = ($expire == 0) ? $this->default_expiration : $expire;
 		$result = $this->mc->add($key, $data, $expire);
 		if ( false !== $result )
@@ -88,6 +95,12 @@ class WP_Object_Cache {
 
 	function delete($id, $group = 'default') {
 		$key = $this->key($id, $group);
+
+		if ( in_array($group, $this->no_mc_groups) ) {
+			unset($this->cache[$key]);
+			return true;
+		}
+
 		$result = $this->mc->delete($key);
 
 		// Update remote servers.
@@ -110,6 +123,8 @@ class WP_Object_Cache {
 		
 		if ( isset($this->cache[$key]) )
 			$value = $this->cache[$key];
+		else if ( in_array($group, $this->no_mc_groups) )
+			$value = false;
 		else
 			$value = $this->mc->get($key);
 
@@ -152,6 +167,10 @@ class WP_Object_Cache {
 		if ( isset($this->cache[$key]) && ('checkthedatabaseplease' == $this->cache[$key]) )
 			return false;
 		$this->cache[$key] = $data;
+
+		if ( in_array($group, $this->no_mc_groups) )
+			return true;
+
 		$expire = ($expire == 0) ? $this->default_expiration : $expire;
 		$result = $this->mc->set($key, $data, $expire);
 		return $result;
