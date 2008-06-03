@@ -3,7 +3,7 @@
 /*
 Name: Memcached
 Description: Memcached backend for the WP Object Cache.
-Version: 0.3
+Version: 0.4
 URI: http://dev.wp-plugins.org/browser/memcached/
 Author: Ryan Boren
 
@@ -65,6 +65,18 @@ function wp_cache_set($key, $data, $flag = '', $expire = 0) {
 		return true;
 }
 
+function wp_cache_add_global_groups( $groups ) {
+	global $wp_object_cache;
+
+	$wp_object_cache->add_global_groups();
+}
+
+function wp_cache_add_non_persistent_groups( $groups ) {
+	global $wp_object_cache;
+
+	$wp_object_cache->add_non_persistent_groups();
+}
+
 class WP_Object_Cache {
 	var $global_groups = array ('users', 'userlogins', 'usermeta', 'site-options', 'site-lookup', 'blog-lookup', 'blog-details', 'rss');
 	var $autoload_groups = array ('options');
@@ -87,6 +99,22 @@ class WP_Object_Cache {
 		if ( false !== $result )
 			$this->cache[$key] = $data;
 		return $result;
+	}
+
+	function add_global_groups($groups) {
+		if ( ! is_array($groups) )
+			$groups = (array) $groups;
+
+		$this->global_groups = array_merge($this->global_groups, $groups);
+		$this->global_groups = array_unique($this->global_groups);
+	}
+
+	function add_non_persistent_groups($groups) {
+		if ( ! is_array($groups) )
+			$groups = (array) $groups;
+
+		$this->no_mc_groups = array_merge($this->no_mc_groups, $groups);
+		$this->no_mc_groups = array_unique($this->no_mc_groups);
 	}
 
 	function close() {
