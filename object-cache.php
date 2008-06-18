@@ -3,7 +3,7 @@
 /*
 Name: Memcached
 Description: Memcached backend for the WP Object Cache.
-Version: 0.4
+Version: 0.6
 URI: http://dev.wp-plugins.org/browser/memcached/
 Author: Ryan Boren
 
@@ -12,12 +12,22 @@ Install this file to wp-content/object-cache.php along with
 memcached-client.php.
 */
 
-include( ABSPATH . "wp-content/memcached-client.php" );
-
 function wp_cache_add($key, $data, $flag = '', $expire = 0) {
 	global $wp_object_cache;
 
 	return $wp_object_cache->add($key, $data, $flag, $expire);
+}
+
+function wp_cache_incr($key, $n = 1, $flag = '') {
+	global $wp_object_cache;
+
+	return $wp_object_cache->incr($key, $n, $flag);
+}
+
+function wp_cache_decr($key, $n = 1, $flag = '') {
+	global $wp_object_cache;
+
+	return $wp_object_cache->decr($key, $n, $flag);
 }
 
 function wp_cache_close() {
@@ -79,12 +89,18 @@ function wp_cache_add_non_persistent_groups( $groups ) {
 
 class WP_Object_Cache {
 	var $global_groups = array ('users', 'userlogins', 'usermeta', 'site-options', 'site-lookup', 'blog-lookup', 'blog-details', 'rss');
+
+	var $no_mc_groups = array( 'comment', 'counts' );
+
 	var $autoload_groups = array ('options');
-	var $cache = array ();
-	var $rmc = array();
+
+	var $cache = array();
+	var $mc = array();
+	var $stats = array();
+	var $group_ops = array();
+
 	var $cache_enabled = true;
 	var $default_expiration = 0;
-	var $no_mc_groups = array( 'comment', 'counts' );
 
 	function add($id, $data, $group = 'default', $expire = 0) {
 		$key = $this->key($id, $group);
@@ -94,8 +110,12 @@ class WP_Object_Cache {
 			return true;
 		}
 
+		$mc =& $this->get_mc($group);
 		$expire = ($expire == 0) ? $this->default_expiration : $expire;
-		$result = $this->mc->add($key, $data, $expire);
+		$result = $mc->add($key, $data, false, $expire);
+		@ ++$this->stats['add'];
+		$this->group_ops[$group][] = "add $id";
+
 		if ( false !== $result )
 			$this->cache[$key] = $data;
 		return $result;
@@ -117,8 +137,24 @@ class WP_Object_Cache {
 		$this->no_mc_groups = array_unique($this->no_mc_groups);
 	}
 
+	function incr($id, $n, $group) {
+		$key = $this->key($id, $group);
+		$mc =& $this->get_mc($group);
+
+		return $mc->increment($key, $n);
+	}
+
+	function decr($id, $n, $group) {
+		$key = $this->key($id, $group);
+		$mc =& $this->get_mc($group);
+
+		return $mc->decrement($key, $n);
+	}
+
 	function close() {
-		$this->mc->disconnect_all();	
+
+		foreach ( $this->mc as $bucket => $mc )
+			$mc->close();
 	}
 
 	function delete($id, $group = 'default') {
@@ -129,13 +165,13 @@ class WP_Object_Cache {
 			return true;
 		}
 
-		$result = $this->mc->delete($key);
+		$mc =& $this->get_mc($group);
 
-		// Update remote servers.
-		if ( count($this->rmc) > 0 ) {
- 			foreach ( $this->rmc as $i => $mc )
- 				$this->rmc[$i]->set($key, 'checkthedatabaseplease', 3);
-		}
+		$result = $mc->delete($key);
+
+		@ ++$this->stats['delete'];
+		$this->group_ops[$group][] = "delete $id";
+
 		if ( false !== $result )
 			unset($this->cache[$key]);
 
@@ -148,13 +184,17 @@ class WP_Object_Cache {
 
 	function get($id, $group = 'default') {
 		$key = $this->key($id, $group);
-		
+		$mc =& $this->get_mc($group);
+
 		if ( isset($this->cache[$key]) )
 			$value = $this->cache[$key];
 		else if ( in_array($group, $this->no_mc_groups) )
 			$value = false;
 		else
-			$value = $this->mc->get($key);
+			$value = $mc->get($key);
+
+		@ ++$this->stats['get'];
+		$this->group_ops[$group][] = "get $id";
 
 		if ( NULL === $value )
 			$value = false;
@@ -165,6 +205,36 @@ class WP_Object_Cache {
 			$value = false;
 
 		return $value;
+	}
+
+	function get_multi( $groups ) {
+	/*
+	format: $get['group-name'] = array( 'key1', 'key2' );
+	*/
+	$return = array();
+		foreach ( $groups as $group => $ids ) {
+			$mc =& $this->get_mc($group);
+			foreach ( $ids as $id ) {
+				$key = $this->key($id, $group);
+				if ( isset($this->cache[$key]) ) {
+					$return[$key] = $this->cache[$key];
+					continue;
+				} else if ( in_array($group, $this->no_mc_groups) ) {
+					$return[$key] = false;
+					continue;
+				} else {
+					$return[$key] = $mc->get($key);
+				}
+			}
+			if ( $to_get ) {
+				$vals = $mc->get_multi( $to_get );
+				$return = array_merge( $return, $vals );
+			}
+		}
+		@ ++$this->stats['get_multi'];
+		$this->group_ops[$group][] = "get_multi $id";
+		$this->cache = array_merge( $this->cache, $return );
+		return $return;
 	}
 
 	function key($key, $group) {	
@@ -184,7 +254,8 @@ class WP_Object_Cache {
 	function replace($id, $data, $group = 'default', $expire = 0) {
 		$key = $this->key($id, $group);
 		$expire = ($expire == 0) ? $this->default_expiration : $expire;
-		$result = $this->mc->replace($key, $data, $expire);
+		$mc =& $this->get_mc($group);
+		$result = $mc->replace($key, $data, false, $expire);
 		if ( false !== $result )
 			$this->cache[$key] = $data;
 		return $result;
@@ -200,47 +271,73 @@ class WP_Object_Cache {
 			return true;
 
 		$expire = ($expire == 0) ? $this->default_expiration : $expire;
-		$result = $this->mc->set($key, $data, $expire);
+		$mc =& $this->get_mc($group);
+		$result = $mc->set($key, $data, false, $expire);
+
 		return $result;
+	}
+
+	function colorize_debug_line($line) {
+		$colors = array(
+			'get' => 'green',
+			'set' => 'purple',
+			'add' => 'blue',
+			'delete' => 'red');
+
+		$cmd = substr($line, 0, strpos($line, ' '));
+
+		$cmd2 = "<span style='color:{$colors[$cmd]}'>$cmd</span>";
+
+		return $cmd2 . substr($line, strlen($cmd)) . "\n";
 	}
 
 	function stats() {
 		echo "<p>\n";
-		echo "<strong>Cache Gets:</strong> {$this->mc->stats['get']}<br/>\n";
-		echo "<strong>Cache Adds:</strong> {$this->mc->stats['add']}<br/>\n";
-		echo "<strong>Cache Replaces:</strong> {$this->mc->stats['replace']}<br/>\n";
+		foreach ( $this->stats as $stat => $n ) {
+			echo "<strong>$stat</strong> $n";
+			echo "<br/>\n";
+		}
 		echo "</p>\n";
-		
-		if ( ! empty($this->cache) ) {
+		echo "<h3>Memcached:</h3>";
+		foreach ( $this->group_ops as $group => $ops ) {
+			if ( !isset($_GET['debug_queries']) && 500 < count($ops) ) { 
+				$ops = array_slice( $ops, 0, 500 ); 
+				echo "<big>Too many to show! <a href='" . add_query_arg( 'debug_queries', 'true' ) . "'>Show them anyway</a>.</big>\n";
+			} 
+			echo "<h4>$group commands</h4>";
 			echo "<pre>\n";
-			print_r($this->cache);
+			$lines = array();
+			foreach ( $ops as $op ) {
+				$lines[] = $this->colorize_debug_line($op); 
+			}
+			print_r($lines);
 			echo "</pre>\n";
 		}
+
+		if ( $this->debug )
+			var_dump($this->memcache_debug);
+	}
+
+	function failure_callback($host, $port) {
+		//error_log("Connection failure for $host:$port\n", 3, '/tmp/memcached.txt');
 	}
 
 	function WP_Object_Cache() {
 		global $memcached_servers;
-		global $remote_memcached_clusters;
 
 		if ( isset($memcached_servers) )
-			$servers = $memcached_servers;
+			$buckets = $memcached_servers;
 		else
-			$servers = array('127.0.0.1:11211');
+			$buckets = array('default' => array('127.0.0.1:11211'));
 
-  		$this->mc = new memcached(array(
-				'servers' => $servers,
-				'debug'   => false,
-				'compress_threshold' => 10240,
-				'persistant' => true));
-
-		if ( isset($remote_memcached_clusters) )
-			foreach ( $remote_memcached_clusters as $servers )
-		  		$this->rmc[] = new memcached(array(
-						'servers' => $servers,
-						'debug'   => false,
-						'compress_threshold' => 10240,
-						'persistant' => true));
-
+		foreach ( $buckets as $bucket => $servers) {
+			$this->mc[$bucket] = new Memcache();
+			foreach ( $servers as $server  ) {
+				list ( $node, $port ) = explode(':', $server);
+				$this->mc[$bucket]->addServer($node, $port, true, 1, 1, 15, true, array($this, 'failure_callback'));
+				$this->mc[$bucket]->setCompressThreshold(20000, 0.2);
+			}
+		}
 	}
 }
 ?>
