@@ -318,6 +318,12 @@ class WP_Object_Cache {
 			var_dump($this->memcache_debug);
 	}
 
+	function &get_mc($group) {
+		if ( isset($this->mc[$group]) )
+			return $this->mc[$group];
+		return $this->mc['default'];
+	}
+
 	function failure_callback($host, $port) {
 		//error_log("Connection failure for $host:$port\n", 3, '/tmp/memcached.txt');
 	}
