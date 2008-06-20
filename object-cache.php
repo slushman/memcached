@@ -3,7 +3,7 @@
 /*
 Name: Memcached
 Description: Memcached backend for the WP Object Cache.
-Version: 0.4
+Version: 1.0
 URI: http://dev.wp-plugins.org/browser/memcached/
 Author: Ryan Boren
 
