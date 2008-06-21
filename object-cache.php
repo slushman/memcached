@@ -20,6 +20,18 @@ function wp_cache_add($key, $data, $flag = '', $expire = 0) {
 	return $wp_object_cache->add($key, $data, $flag, $expire);
 }
 
+function wp_cache_incr($key, $n = 1, $flag = '') {
+	global $wp_object_cache;
+
+	return $wp_object_cache->incr($key, $n, $flag);
+}
+
+function wp_cache_decr($key, $n = 1, $flag = '') {
+	global $wp_object_cache;
+
+	return $wp_object_cache->decr($key, $n, $flag);
+}
+
 function wp_cache_close() {
 	global $wp_object_cache;
 
@@ -68,13 +80,13 @@ function wp_cache_set($key, $data, $flag = '', $expire = 0) {
 function wp_cache_add_global_groups( $groups ) {
 	global $wp_object_cache;
 
-	$wp_object_cache->add_global_groups();
+	$wp_object_cache->add_global_groups($groups);
 }
 
 function wp_cache_add_non_persistent_groups( $groups ) {
 	global $wp_object_cache;
 
-	$wp_object_cache->add_non_persistent_groups();
+	$wp_object_cache->add_non_persistent_groups($groups);
 }
 
 class WP_Object_Cache {
@@ -119,6 +131,12 @@ class WP_Object_Cache {
 
 	function close() {
 		$this->mc->disconnect_all();	
+	}
+
+	function decr($id, $n, $group) {
+		$key = $this->key($id, $group);
+
+		return $this->mc->decr($key, $n);
 	}
 
 	function delete($id, $group = 'default') {
@@ -167,6 +185,12 @@ class WP_Object_Cache {
 		return $value;
 	}
 
+	function incr($id, $n, $group) {
+		$key = $this->key($id, $group);
+
+		return $this->mc->incr($key, $n);
+	}
+
 	function key($key, $group) {	
 		global $blog_id;
 
@@ -210,7 +234,7 @@ class WP_Object_Cache {
 		echo "<strong>Cache Adds:</strong> {$this->mc->stats['add']}<br/>\n";
 		echo "<strong>Cache Replaces:</strong> {$this->mc->stats['replace']}<br/>\n";
 		echo "</p>\n";
-		
+
 		if ( ! empty($this->cache) ) {
 			echo "<pre>\n";
 			print_r($this->cache);
@@ -227,7 +251,7 @@ class WP_Object_Cache {
 		else
 			$servers = array('127.0.0.1:11211');
 
-  		$this->mc = new memcached(array(
+		$this->mc = new memcached(array(
 				'servers' => $servers,
 				'debug'   => false,
 				'compress_threshold' => 10240,
