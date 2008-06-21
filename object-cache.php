@@ -136,7 +136,11 @@ class WP_Object_Cache {
 	function decr($id, $n, $group) {
 		$key = $this->key($id, $group);
 
-		return $this->mc->decr($key, $n);
+		$value = $this->mc->decr($key, $n);
+
+		$this->cache[$key] = $value;
+
+		return $value;
 	}
 
 	function delete($id, $group = 'default') {
@@ -188,7 +192,11 @@ class WP_Object_Cache {
 	function incr($id, $n, $group) {
 		$key = $this->key($id, $group);
 
-		return $this->mc->incr($key, $n);
+		$value = $this->mc->incr($key, $n);
+
+		$this->cache[$key] = $value;
+
+		return $value;
 	}
 
 	function key($key, $group) {	
