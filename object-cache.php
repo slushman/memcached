@@ -97,6 +97,7 @@ class WP_Object_Cache {
 	var $cache_enabled = true;
 	var $default_expiration = 0;
 	var $no_mc_groups = array( 'comment', 'counts' );
+	var $flushes = null;
 
 	function add($id, $data, $group = 'default', $expire = 0) {
 		$key = $this->key($id, $group);
@@ -165,6 +166,10 @@ class WP_Object_Cache {
 	}
 
 	function flush() {
+		$this->get_flushes();
+
+		$this->set_flushes( $this->flushes + 1 );
+
 		return true;
 	}
 
@@ -189,6 +194,18 @@ class WP_Object_Cache {
 		return $value;
 	}
 
+	function get_flushes() {
+		if ( $this->flushes )
+			return $this->flushes;
+
+		$this->flushes = $this->mc->get('flushes');
+
+		if ( $this->flushes > 0 )
+			return $this->flushes;
+
+		return $this->set_flushes(1);
+	}
+
 	function incr($id, $n, $group) {
 		$key = $this->key($id, $group);
 
@@ -210,7 +227,10 @@ class WP_Object_Cache {
 		else
 			$prefix = $blog_id . ':';
 
-		return preg_replace('/\s+/', '', "$prefix$group:$key");
+		if ( ! $this->flushes )
+			$this->get_flushes();
+
+		return preg_replace('/\s+/', '', "$this->flushes:$prefix$group:$key");
 	}
 
 	function replace($id, $data, $group = 'default', $expire = 0) {
@@ -234,6 +254,17 @@ class WP_Object_Cache {
 		$expire = ($expire == 0) ? $this->default_expiration : $expire;
 		$result = $this->mc->set($key, $data, $expire);
 		return $result;
+	}
+
+	function set_flushes( $flushes ) {
+		if ( ! $flushes )
+			return false;
+
+		$this->flushes = $flushes;
+
+		$this->mc->set('flushes', $this->flushes, 0);
+
+		return $this->flushes;
 	}
 
 	function stats() {
