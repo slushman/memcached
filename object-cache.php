@@ -78,13 +78,13 @@ function wp_cache_set($key, $data, $flag = '', $expire = 0) {
 function wp_cache_add_global_groups( $groups ) {
 	global $wp_object_cache;
 
-	$wp_object_cache->add_global_groups();
+	$wp_object_cache->add_global_groups($groups);
 }
 
 function wp_cache_add_non_persistent_groups( $groups ) {
 	global $wp_object_cache;
 
-	$wp_object_cache->add_non_persistent_groups();
+	$wp_object_cache->add_non_persistent_groups($groups);
 }
 
 class WP_Object_Cache {
