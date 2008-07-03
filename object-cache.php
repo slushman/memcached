@@ -97,7 +97,8 @@ class WP_Object_Cache {
 	var $cache_enabled = true;
 	var $default_expiration = 0;
 	var $no_mc_groups = array( 'comment', 'counts' );
-	var $flushes = null;
+	var $blog_flushes = array();
+	var $global_flushes = null;
 
 	function add($id, $data, $group = 'default', $expire = 0) {
 		$key = $this->key($id, $group);
@@ -131,7 +132,7 @@ class WP_Object_Cache {
 	}
 
 	function close() {
-		$this->mc->disconnect_all();	
+		$this->mc->disconnect_all();
 	}
 
 	function decr($id, $n, $group) {
@@ -162,20 +163,18 @@ class WP_Object_Cache {
 		if ( false !== $result )
 			unset($this->cache[$key]);
 
-		return $result; 
+		return $result;
 	}
 
-	function flush() {
-		$this->get_flushes();
-
-		$this->set_flushes( $this->flushes + 1 );
+	function flush( $group = '' ) {
+		$this->set_flushes( $group, $this->get_flushes($group) + 1 );
 
 		return true;
 	}
 
 	function get($id, $group = 'default') {
 		$key = $this->key($id, $group);
-		
+
 		if ( isset($this->cache[$key]) )
 			$value = $this->cache[$key];
 		else if ( in_array($group, $this->no_mc_groups) )
@@ -185,7 +184,7 @@ class WP_Object_Cache {
 
 		if ( NULL === $value )
 			$value = false;
-			
+
 		$this->cache[$key] = $value;
 
 		if ( 'checkthedatabaseplease' == $value )
@@ -194,16 +193,34 @@ class WP_Object_Cache {
 		return $value;
 	}
 
-	function get_flushes() {
-		if ( $this->flushes )
-			return $this->flushes;
+	function get_flushes( $group = '' ) {
+		global $blog_id;
 
-		$this->flushes = $this->mc->get('flushes');
+		if ( in_array($group, $this->global_groups) ) {
+			if ( is_array( $this->global_flushes ) && isset( $this->global_flushes[$group] ) )
+				return $this->global_flushes[$group];
 
-		if ( $this->flushes > 0 )
-			return $this->flushes;
+			$this->global_flushes = $this->mc->get('global_flushes');
 
-		return $this->set_flushes(1);
+			if ( is_array( $this->global_flushes ) && isset( $this->global_flushes[$group] ) )
+				return $this->global_flushes[$group];
+
+			$this->set_flushes($group, 1);
+
+			return $this->global_flushes[$group];
+		} else {
+			if ( is_array( $this->blog_flushes[$blog_id] ) && isset( $this->blog_flushes[$blog_id][$group] ) )
+				return $this->blog_flushes[$blog_id][$group];
+
+			$this->blog_flushes[$blog_id] = $this->mc->get("blog_flushes[$blog_id]");
+
+			if ( is_array( $this->blog_flushes[$blog_id] ) && isset( $this->blog_flushes[$blog_id][$group] ) )
+				return $this->blog_flushes[$blog_id][$group];
+
+			$this->set_flushes($group, 1);
+
+			return $this->blog_flushes[$blog_id][$group];
+		}
 	}
 
 	function incr($id, $n, $group) {
@@ -216,21 +233,21 @@ class WP_Object_Cache {
 		return $value;
 	}
 
-	function key($key, $group) {	
+	function key($key, $group) {
 		global $blog_id;
 
 		if ( empty($group) )
 			$group = 'default';
 
-		if (false !== array_search($group, $this->global_groups))
+		if ( in_array($group, $this->global_groups) )
 			$prefix = '';
 		else
 			$prefix = $blog_id . ':';
 
-		if ( ! $this->flushes )
-			$this->get_flushes();
+		$flushes = $this->get_flushes();
+		$group_flushes = $this->get_flushes($group);
 
-		return preg_replace('/\s+/', '', "$this->flushes:$prefix$group:$key");
+		return preg_replace('/\s+/', '', "$prefix$flushes:$group:$group_flushes:$key");
 	}
 
 	function replace($id, $data, $group = 'default', $expire = 0) {
@@ -256,15 +273,26 @@ class WP_Object_Cache {
 		return $result;
 	}
 
-	function set_flushes( $flushes ) {
-		if ( ! $flushes )
-			return false;
+	function set_flushes( $group, $flushes ) {
+		global $blog_id;
 
-		$this->flushes = $flushes;
+		if ( in_array($group, $this->global_groups) ) {
+			if ( !is_array( $this->global_flushes ) )
+				$this->global_flushes = array( '' => 1 );
 
-		$this->mc->set('flushes', $this->flushes, 0);
+			$this->global_flushes[$group] = $flushes;
 
-		return $this->flushes;
+			$this->mc->set('global_flushes', $this->global_flushes, 0);
+		} else {
+			if ( !is_array( $this->blog_flushes[$blog_id] ) )
+				$this->blog_flushes[$blog_id] = array( '' => 1 );
+
+			$this->blog_flushes[$blog_id][$group] = $flushes;
+
+			$this->mc->set("blog_flushes[$blog_id]", $this->blog_flushes[$blog_id], 0);
+		}
+		
+		return $flushes;
 	}
 
 	function stats() {
