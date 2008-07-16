@@ -8,8 +8,7 @@ URI: http://dev.wp-plugins.org/browser/memcached/
 Author: Ryan Boren
 
 
-Install this file to wp-content/object-cache.php along with
-memcached-client.php.
+Install this file to wp-content/object-cache.php
 */
 
 function wp_cache_add($key, $data, $flag = '', $expire = 0) {
