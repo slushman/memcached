@@ -71,7 +71,7 @@ function wp_cache_set($key, $data, $flag = '', $expire = 0) {
 	if ( defined('WP_INSTALLING') == false )
 		return $wp_object_cache->set($key, $data, $flag, $expire);
 	else
-		return true;
+		return $wp_object_cache->delete($key, $flag);
 }
 
 function wp_cache_add_global_groups( $groups ) {
