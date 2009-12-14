@@ -3,10 +3,9 @@
 /*
 Plugin Name: Memcached
 Description: Memcached backend for the WP Object Cache.
-Version: 2.0
-Plugin URI: http://dev.wp-plugins.org/browser/memcached/
-Author: Ryan Boren
-
+Version: 2.0.1
+Plugin URI: http://wordpress.org/extend/plugins/memcached/
+Author: Ryan Boren, Denis de Bernardy
 
 Install this file to wp-content/object-cache.php
 */
@@ -107,16 +106,20 @@ class WP_Object_Cache {
 		if ( in_array($group, $this->no_mc_groups) ) {
 			$this->cache[$key] = $data;
 			return true;
+		} elseif ( isset($this->cache[$key]) && $this->cache[$key] !== false ) {
+			return false;
 		}
 
 		$mc =& $this->get_mc($group);
 		$expire = ($expire == 0) ? $this->default_expiration : $expire;
 		$result = $mc->add($key, $data, false, $expire);
-		@ ++$this->stats['add'];
-		$this->group_ops[$group][] = "add $id";
 
-		if ( false !== $result )
+		if ( false !== $result ) {
+			@ ++$this->stats['add'];
+			$this->group_ops[$group][] = "add $id";
 			$this->cache[$key] = $data;
+		}
+
 		return $result;
 	}
 
@@ -178,7 +181,14 @@ class WP_Object_Cache {
 	}
 
 	function flush() {
-		return true;
+		// Don't flush if multi-blog.
+		if ( function_exists('is_site_admin') || defined('CUSTOM_USER_TABLE') && defined('CUSTOM_USER_META_TABLE') )
+			return true;
+
+		$ret = true;
+		foreach ( array_keys($this->mc) as $group )
+			$ret &= $this->mc[$group]->flush();
+		return $ret;
 	}
 
 	function get($id, $group = 'default') {
@@ -207,10 +217,10 @@ class WP_Object_Cache {
 	}
 
 	function get_multi( $groups ) {
-	/*
-	format: $get['group-name'] = array( 'key1', 'key2' );
-	*/
-	$return = array();
+		/*
+		format: $get['group-name'] = array( 'key1', 'key2' );
+		*/
+		$return = array();
 		foreach ( $groups as $group => $ids ) {
 			$mc =& $this->get_mc($group);
 			foreach ( $ids as $id ) {
@@ -237,15 +247,13 @@ class WP_Object_Cache {
 	}
 
 	function key($key, $group) {	
-		global $blog_id;
-
 		if ( empty($group) )
 			$group = 'default';
 
-		if (false !== array_search($group, $this->global_groups))
-			$prefix = '';
+		if ( false !== array_search($group, $this->global_groups) )
+			$prefix = $this->global_prefix;
 		else
-			$prefix = $blog_id . ':';
+			$prefix = $this->blog_prefix;
 
 		return preg_replace('/\s+/', '', "$prefix$group:$key");
 	}
@@ -333,16 +341,32 @@ class WP_Object_Cache {
 		if ( isset($memcached_servers) )
 			$buckets = $memcached_servers;
 		else
-			$buckets = array('default' => array('127.0.0.1:11211'));
+			$buckets = array('127.0.0.1');
+
+		reset($buckets);
+		if ( is_int(key($buckets)) )
+			$buckets = array('default' => $buckets);
 
 		foreach ( $buckets as $bucket => $servers) {
 			$this->mc[$bucket] = new Memcache();
 			foreach ( $servers as $server  ) {
 				list ( $node, $port ) = explode(':', $server);
+				if ( !$port )
+					$port = ini_get('memcache.default_port');
+				$port = intval($port);
+				if ( !$port )
+					$port = 11211;
 				$this->mc[$bucket]->addServer($node, $port, true, 1, 1, 15, true, array($this, 'failure_callback'));
 				$this->mc[$bucket]->setCompressThreshold(20000, 0.2);
 			}
 		}
+
+		global $blog_id, $table_prefix;
+		$this->global_prefix = ( function_exists('is_site_admin') || defined('CUSTOM_USER_TABLE') && defined('CUSTOM_USER_META_TABLE') ) ? '' : $table_prefix;
+		$this->blog_prefix = ( function_exists('is_site_admin') ? $blog_id : $table_prefix ) . ':';
+
+		$this->cache_hits =& $this->stats['get'];
+		$this->cache_misses =& $this->stats['add'];
 	}
 }
 ?>
