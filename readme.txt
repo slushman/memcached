@@ -1,6 +1,7 @@
 === Memcached Object Cache ===
 Contributors: ryan
 Tags: cache, memcached
+Stable tag: 2.0
 
 Use memcached and the PECL memcached extension to provide a backing store for the WordPres object cache.
 
