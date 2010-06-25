@@ -5,7 +5,7 @@ Plugin Name: Memcached
 Description: Memcached backend for the WP Object Cache.
 Version: 2.0.1
 Plugin URI: http://wordpress.org/extend/plugins/memcached/
-Author: Ryan Boren, Denis de Bernardy
+Author: Ryan Boren, Denis de Bernardy, Matt Martz
 
 Install this file to wp-content/object-cache.php
 */
@@ -362,8 +362,8 @@ class WP_Object_Cache {
 		}
 
 		global $blog_id, $table_prefix;
-		$this->global_prefix = ( function_exists('is_site_admin') || defined('CUSTOM_USER_TABLE') && defined('CUSTOM_USER_META_TABLE') ) ? '' : $table_prefix;
-		$this->blog_prefix = ( function_exists('is_site_admin') ? $blog_id : $table_prefix ) . ':';
+		$this->global_prefix = ( is_multisite() || defined('CUSTOM_USER_TABLE') && defined('CUSTOM_USER_META_TABLE') ) ? '' : $table_prefix;
+		$this->blog_prefix = ( is_multisite() ? $blog_id : $table_prefix ) . ':';
 
 		$this->cache_hits =& $this->stats['get'];
 		$this->cache_misses =& $this->stats['add'];
