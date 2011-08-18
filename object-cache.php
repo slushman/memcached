@@ -103,6 +103,9 @@ class WP_Object_Cache {
 	function add($id, $data, $group = 'default', $expire = 0) {
 		$key = $this->key($id, $group);
 
+		if ( is_object( $data ) )
+			$data = clone $data;
+
 		if ( in_array($group, $this->no_mc_groups) ) {
 			$this->cache[$key] = $data;
 			return true;
@@ -195,23 +198,27 @@ class WP_Object_Cache {
 		$key = $this->key($id, $group);
 		$mc =& $this->get_mc($group);
 
-		if ( isset($this->cache[$key]) )
-			$value = $this->cache[$key];
-		else if ( in_array($group, $this->no_mc_groups) )
-			$value = false;
-		else
+		if ( isset($this->cache[$key]) ) {
+			if ( is_object( $this->cache[$key] ) )
+ 				$value = clone $this->cache[$key];
+			else
+				$value = $this->cache[$key];
+		} else if ( in_array($group, $this->no_mc_groups) ) {
+			$this->cache[$key] = $value = false;
+		} else {
 			$value = $mc->get($key);
+	                if ( NULL === $value )
+                        	$value = false;
+			$this->cache[$key] = $value;
+		}
 
 		@ ++$this->stats['get'];
 		$this->group_ops[$group][] = "get $id";
 
-		if ( NULL === $value )
+		if ( 'checkthedatabaseplease' == $value ) {
+			unset( $this->cache[$key] );
 			$value = false;
-			
-		$this->cache[$key] = $value;
-
-		if ( 'checkthedatabaseplease' == $value )
-			$value = false;
+		}
 
 		return $value;
 	}
@@ -226,7 +233,10 @@ class WP_Object_Cache {
 			foreach ( $ids as $id ) {
 				$key = $this->key($id, $group);
 				if ( isset($this->cache[$key]) ) {
-					$return[$key] = $this->cache[$key];
+					if ( is_object( $this->cache[$key] ) )
+						$return[$key] = clone $this->cache[$key];
+					else
+						$return[$key] = $this->cache[$key];
 					continue;
 				} else if ( in_array($group, $this->no_mc_groups) ) {
 					$return[$key] = false;
@@ -262,6 +272,10 @@ class WP_Object_Cache {
 		$key = $this->key($id, $group);
 		$expire = ($expire == 0) ? $this->default_expiration : $expire;
 		$mc =& $this->get_mc($group);
+
+		if ( is_object( $data ) )
+			$data = clone $data;
+
 		$result = $mc->replace($key, $data, false, $expire);
 		if ( false !== $result )
 			$this->cache[$key] = $data;
@@ -272,6 +286,10 @@ class WP_Object_Cache {
 		$key = $this->key($id, $group);
 		if ( isset($this->cache[$key]) && ('checkthedatabaseplease' == $this->cache[$key]) )
 			return false;
+
+		if ( is_object($data) )
+			$data = clone $data;
+
 		$this->cache[$key] = $data;
 
 		if ( in_array($group, $this->no_mc_groups) )
