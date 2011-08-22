@@ -215,7 +215,7 @@ class WP_Object_Cache {
 		@ ++$this->stats['get'];
 		$this->group_ops[$group][] = "get $id";
 
-		if ( 'checkthedatabaseplease' == $value ) {
+		if ( 'checkthedatabaseplease' === $value ) {
 			unset( $this->cache[$key] );
 			$value = false;
 		}
@@ -284,7 +284,7 @@ class WP_Object_Cache {
 
 	function set($id, $data, $group = 'default', $expire = 0) {
 		$key = $this->key($id, $group);
-		if ( isset($this->cache[$key]) && ('checkthedatabaseplease' == $this->cache[$key]) )
+		if ( isset($this->cache[$key]) && ('checkthedatabaseplease' === $this->cache[$key]) )
 			return false;
 
 		if ( is_object($data) )
