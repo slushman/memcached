@@ -86,11 +86,9 @@ function wp_cache_add_non_persistent_groups( $groups ) {
 }
 
 class WP_Object_Cache {
-	var $global_groups = array ('users', 'userlogins', 'usermeta', 'site-options', 'site-lookup', 'blog-lookup', 'blog-details', 'rss');
+	var $global_groups = array();
 
-	var $no_mc_groups = array( 'comment', 'counts' );
-
-	var $autoload_groups = array ('options');
+	var $no_mc_groups = array();
 
 	var $cache = array();
 	var $mc = array();
@@ -362,7 +360,7 @@ class WP_Object_Cache {
 			$buckets = array('127.0.0.1');
 
 		reset($buckets);
-		if ( is_int(key($buckets)) )
+		if ( is_int( key($buckets) ) )
 			$buckets = array('default' => $buckets);
 
 		foreach ( $buckets as $bucket => $servers) {
