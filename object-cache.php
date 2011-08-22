@@ -142,18 +142,18 @@ class WP_Object_Cache {
 		$this->no_mc_groups = array_unique($this->no_mc_groups);
 	}
 
-	function incr($id, $n, $group) {
+	function incr($id, $n = 1, $group = 'default' ) {
 		$key = $this->key($id, $group);
 		$mc =& $this->get_mc($group);
-
-		return $mc->increment($key, $n);
+		$this->cache[ $key ] = $mc->increment( $key, $n );	
+		return $this->cache[ $key ];
 	}
 
-	function decr($id, $n, $group) {
+	function decr($id, $n = 1, $group = 'default' ) {
 		$key = $this->key($id, $group);
 		$mc =& $this->get_mc($group);
-
-		return $mc->decrement($key, $n);
+		$this->cache[ $key ] = $mc->decrement( $key, $n );
+		return $this->cache[ $key ];
 	}
 
 	function close() {
