@@ -10,22 +10,22 @@ Author: Ryan Boren, Denis de Bernardy, Matt Martz
 Install this file to wp-content/object-cache.php
 */
 
-function wp_cache_add($key, $data, $flag = '', $expire = 0) {
+function wp_cache_add($key, $data, $group = '', $expire = 0) {
 	global $wp_object_cache;
 
-	return $wp_object_cache->add($key, $data, $flag, $expire);
+	return $wp_object_cache->add($key, $data, $group, $expire);
 }
 
-function wp_cache_incr($key, $n = 1, $flag = '') {
+function wp_cache_incr($key, $n = 1, $group = '') {
 	global $wp_object_cache;
 
-	return $wp_object_cache->incr($key, $n, $flag);
+	return $wp_object_cache->incr($key, $n, $group);
 }
 
-function wp_cache_decr($key, $n = 1, $flag = '') {
+function wp_cache_decr($key, $n = 1, $group = '') {
 	global $wp_object_cache;
 
-	return $wp_object_cache->decr($key, $n, $flag);
+	return $wp_object_cache->decr($key, $n, $group);
 }
 
 function wp_cache_close() {
@@ -34,10 +34,10 @@ function wp_cache_close() {
 	return $wp_object_cache->close();
 }
 
-function wp_cache_delete($id, $flag = '') {
+function wp_cache_delete($key, $group = '') {
 	global $wp_object_cache;
 
-	return $wp_object_cache->delete($id, $flag);
+	return $wp_object_cache->delete($key, $group);
 }
 
 function wp_cache_flush() {
@@ -46,10 +46,10 @@ function wp_cache_flush() {
 	return $wp_object_cache->flush();
 }
 
-function wp_cache_get($id, $flag = '') {
+function wp_cache_get($key, $group = '') {
 	global $wp_object_cache;
 
-	return $wp_object_cache->get($id, $flag);
+	return $wp_object_cache->get($key, $group);
 }
 
 function wp_cache_init() {
@@ -58,19 +58,19 @@ function wp_cache_init() {
 	$wp_object_cache = new WP_Object_Cache();
 }
 
-function wp_cache_replace($key, $data, $flag = '', $expire = 0) {
+function wp_cache_replace($key, $data, $group = '', $expire = 0) {
 	global $wp_object_cache;
 
-	return $wp_object_cache->replace($key, $data, $flag, $expire);
+	return $wp_object_cache->replace($key, $data, $group, $expire);
 }
 
-function wp_cache_set($key, $data, $flag = '', $expire = 0) {
+function wp_cache_set($key, $data, $group = '', $expire = 0) {
 	global $wp_object_cache;
 
 	if ( defined('WP_INSTALLING') == false )
-		return $wp_object_cache->set($key, $data, $flag, $expire);
+		return $wp_object_cache->set($key, $data, $group, $expire);
 	else
-		return $wp_object_cache->delete($key, $flag);
+		return $wp_object_cache->delete($key, $group);
 }
 
 function wp_cache_add_global_groups( $groups ) {
