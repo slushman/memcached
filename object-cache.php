@@ -78,6 +78,12 @@ function wp_cache_set($key, $data, $group = '', $expire = 0) {
 		return $wp_object_cache->delete($key, $group);
 }
 
+function wp_cache_switch_to_blog( $blog_id ) {
+	global $wp_object_cache;
+
+	return $wp_object_cache->switch_to_blog( $blog_id );
+}
+
 function wp_cache_add_global_groups( $groups ) {
 	global $wp_object_cache;
 
@@ -303,6 +309,11 @@ class WP_Object_Cache {
 		$result = $mc->set($key, $data, false, $expire);
 
 		return $result;
+	}
+
+	function switch_to_blog( $blog_id ) {
+		$blog_id = (int) $blog_id;
+		$this->blog_prefix = ( is_multisite() ? $blog_id : $table_prefix ) . ':';
 	}
 
 	function colorize_debug_line($line) {
